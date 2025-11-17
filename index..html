@@ -1,0 +1,1474 @@
+<!DOCTYPE html>
+<html lang="en" class="light">
+    <script type="module">
+  // Import Firebase SDKs
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
+  import { getDatabase, ref, set, get } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js";
+
+  // 🔑 PASTE YOUR REAL FIREBASE CONFIG OBJECT HERE
+  // Delete all the "YOUR_API_KEY" placeholder lines below (lines 9-17)
+  // and replace them with the entire `const firebaseConfig = { ... };`
+  // object you just copied from the Firebase console.
+  const firebaseConfig = {
+    apiKey: "YOUR_API_KEY",
+    authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+    databaseURL: "https://YOUR_PROJECT_ID-default-rtdb.firebaseio.com",
+    projectId: "YOUR_PROJECT_ID",
+    storageBucket: "YOUR_PROJECT_ID.appspot.com",
+    messagingSenderId: "YOUR_SENDER_ID",
+    appId: "YOUR_APP_ID"
+  };
+  // -----------------------------------------------------
+
+  // Initialize Firebase
+  const app = initializeApp(firebaseConfig);
+  const db = getDatabase(app);
+
+  // --- SAVE DATA TO FIREBASE ---
+  window.saveToBackend = async (username, data) => {
+    try {
+      await set(ref(db, `users/${username}`), data);
+      console.log("✅ Data saved to Firebase");
+    } catch (err) {
+      console.error("❌ Save failed:", err);
+    }
+  };
+
+  // --- LOAD DATA FROM FIREBASE ---
+  window.loadFromBackend = async (username) => {
+    try {
+      const snapshot = await get(ref(db, `users/${username}`));
+      if (snapshot.exists()) {
+        console.log("✅ Data loaded from Firebase");
+        return snapshot.val();
+      } else {
+        console.log("⚠️ No data found for this user");
+        return null;
+      }
+    } catch (err) {
+      console.error("❌ Load failed:", err);
+      return null;
+    }
+  };
+</script>
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Productivity Master | Ultimate Task Manager</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .content-section {
+            display: none;
+            animation: fadeIn 0.5s;
+        }
+        .content-section.active {
+            display: block;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f5f9; }
+        ::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: #64748b; }
+        html.dark ::-webkit-scrollbar-track { background: #1e293b; }
+        html.dark ::-webkit-scrollbar-thumb { background: #475569; }
+        html.dark ::-webkit-scrollbar-thumb:hover { background: #64748b; }
+        
+        .timer-digit {
+            background-color: #e2e8f0;
+            padding: 0.5rem 0.75rem;
+            border-radius: 0.375rem;
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #1e293b;
+            min-width: 50px;
+            text-align: center;
+        }
+        html.dark .timer-digit {
+            background-color: #334155;
+            color: #e2e8f0;
+        }
+        .timer-label {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            color: #64748b;
+        }
+        
+        /* Timetable Styles */
+        .timetable-container {
+            display: flex;
+            position: relative;
+        }
+        .timetable-times {
+            width: 80px;
+            flex-shrink: 0;
+        }
+        .timetable-grid {
+            flex-grow: 1;
+            background-image: linear-gradient(to bottom, #e2e8f0 1px, transparent 1px);
+            background-size: 100% 60px; /* One line per hour */
+            position: relative;
+            height: calc(17 * 60px); /* 7 AM to Midnight */
+        }
+        html.dark .timetable-grid {
+             background-image: linear-gradient(to bottom, #334155 1px, transparent 1px);
+        }
+        .time-slot-label {
+            height: 60px;
+            text-align: right;
+            padding-right: 10px;
+            font-size: 0.8rem;
+            color: #64748b;
+            position: relative;
+            top: -8px;
+        }
+        .timetable-task {
+            position: absolute;
+            left: 5px;
+            right: 5px;
+            border-radius: 8px;
+            padding: 8px;
+            color: white;
+            z-index: 10;
+            overflow: hidden;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        
+        /* NEW: Calendar Styles */
+        .calendar-grid {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 4px;
+        }
+        .calendar-day {
+            min-height: 120px;
+            padding: 8px;
+            background-color: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            transition: background-color 0.2s;
+        }
+        html.dark .calendar-day {
+            background-color: #1e293b;
+            border-color: #334155;
+        }
+        .calendar-day.empty {
+            background-color: #f8fafc;
+            opacity: 0.7;
+        }
+        html.dark .calendar-day.empty {
+            background-color: #1a2433;
+        }
+        .calendar-day-number {
+            font-weight: 600;
+            font-size: 0.9rem;
+            color: #334155;
+        }
+        html.dark .calendar-day-number {
+            color: #e2e8f0;
+        }
+        .calendar-day.today .calendar-day-number {
+            color: #ffffff;
+            background-color: #2563eb;
+            width: 28px;
+            height: 28px;
+            border-radius: 9999px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .calendar-task-dot {
+            display: flex;
+            align-items: center;
+            font-size: 0.75rem;
+            color: #ffffff;
+            padding: 2px 8px;
+            border-radius: 6px;
+            margin-top: 4px;
+            overflow: hidden;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+        }
+        
+    </style>
+</head>
+<body class="bg-slate-100 dark:bg-slate-900">
+
+    <div id="auth-system" class="min-h-screen flex items-center justify-center p-4 transition-opacity duration-500">
+        <div class="w-full max-w-md">
+            <div class="bg-white dark:bg-slate-800 shadow-2xl rounded-2xl p-8">
+                <div class="text-center mb-8">
+                    <h1 class="text-3xl font-bold text-slate-800 dark:text-white"><i class="fas fa-tasks text-blue-500"></i> Productivity Master</h1>
+                    <p class="text-slate-500 dark:text-slate-400 mt-2">Your all-in-one productivity solution</p>
+                </div>
+                 <div id="auth-error" class="text-red-500 text-sm text-center mb-4 hidden"></div>
+
+                <form id="login-form" class="space-y-4">
+                    <h2 class="text-2xl font-semibold text-center text-slate-700 dark:text-slate-200 mb-6">Login</h2>
+                    <div>
+                        <label for="login-email" class="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1">Email</label>
+                        <input type="email" id="login-email" placeholder="Enter your email" required class="w-full px-4 py-2 bg-slate-100 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    </div>
+                     <div>
+                        <label for="login-password" class="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1">Password</label>
+                        <input type="password" id="login-password" placeholder="Enter your password" required class="w-full px-4 py-2 bg-slate-100 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    </div>
+                    <button type="submit" class="w-full bg-blue-600 text-white font-semibold py-3 rounded-lg hover:bg-blue-700 transition shadow-lg">Enter Hub</button>
+                     <p class="text-center text-sm text-slate-500 dark:text-slate-400">
+                        Don't have an account? <button type="button" id="show-signup" class="font-medium text-blue-600 hover:underline">Sign Up</button>
+                    </p>
+                </form>
+
+                 <form id="signup-form" class="space-y-4 hidden">
+                    <h2 class="text-2xl font-semibold text-center text-slate-700 dark:text-slate-200 mb-6">Sign Up</h2>
+                    <div>
+                        <label for="username " class="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1">Name</label>
+                        <input type="name" id="user name" placeholder="Enter your name" required class="w-full px-4 py-2 bg-slate-100 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    </div>
+                     <div>
+                        <label for="signup-email" class="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1">Email</label>
+                        <input type="email" id="signup-email" placeholder="Enter your email" required class="w-full px-4 py-2 bg-slate-100 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    </div>
+                     <div>
+                        <label for="signup-password" class="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1">Password</label>
+                        <input type="password" id="signup-password" placeholder="Create a password" required class="w-full px-4 py-2 bg-slate-100 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    </div>
+                     <div>
+                        <label for="signup-confirm-password" class="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1">Confirm Password</label>
+                        <input type="password" id="signup-confirm-password" placeholder="Confirm your password" required class="w-full px-4 py-2 bg-slate-100 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    </div>
+                    <button type="submit" class="w-full bg-green-600 text-white font-semibold py-3 rounded-lg hover:bg-green-700 transition shadow-lg">Sign Up</button>
+                    <p class="text-center text-sm text-slate-500 dark:text-slate-400">
+                        Already have an account? <button type="button" id="show-login" class="font-medium text-blue-600 hover:underline">Login</button>
+                    </p>
+                </form>
+            </div>
+             <p class="mt-4 text-xs text-center text-red-500 dark:text-red-400"><strong>Warning:</strong> This login system is for demonstration only and is insecure. Do not use real passwords.</p>
+        </div>
+    </div>
+
+    <div id="app" class="h-screen w-full flex-col hidden">
+        <header class="bg-white dark:bg-slate-800 shadow-md p-4 flex items-center justify-between z-10 shrink-0">
+            <div class="flex items-center space-x-4">
+                <div class="text-xl font-bold text-slate-800 dark:text-white">
+                    <i class="fas fa-tasks text-blue-500"></i>
+                    <span>Productivity Master</span>
+                </div>
+                <nav class="hidden md:flex items-center space-x-2">
+                    <a href="#" class="nav-item active px-3 py-2 text-sm font-medium rounded-md text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700" data-section="dashboard"><i class="fas fa-home mr-2"></i>Dashboard</a>
+                    <a href="#" class="nav-item px-3 py-2 text-sm font-medium rounded-md text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700" data-section="tasks"><i class="fas fa-list-check mr-2"></i>Tasks</a>
+                    <a href="#" class="nav-item px-3 py-2 text-sm font-medium rounded-md text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700" data-section="calendar"><i class="fas fa-calendar-alt mr-2"></i>Calendar</a>
+                    <a href="#" class="nav-item px-3 py-2 text-sm font-medium rounded-md text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700" data-section="time-waste"><i class="fas fa-hourglass-end mr-2"></i>Time Waste</a>
+                    <a href="#" class="nav-item px-3 py-2 text-sm font-medium rounded-md text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700" data-section="growth"><i class="fas fa-award mr-2"></i>growth</a>
+                    <a href="#" class="nav-item px-3 py-2 text-sm font-medium rounded-md text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700" data-section="vision"><i class="fas fa-eye mr-2"></i>Vision</a> 
+                </nav>
+            </div>
+            <div class="flex items-center space-x-4">
+                 <div id="live-clock-display" class="font-semibold text-slate-700 dark:text-slate-200 text-sm hidden md:block"></div>
+                <div class="font-bold text-slate-700 dark:text-slate-200 flex items-center">
+                    <i class="fas fa-star text-yellow-400 mr-2"></i>
+                    <span>Task Score: <span id="task-score-display">0</span>%</span>
+                </div>
+
+                <button id="export-data-btn" class="p-2 rounded-full text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-700 focus:outline-none" title="Export Data">
+                    <i class="fas fa-download"></i>
+                </button>
+                <button id="import-data-btn" class="p-2 rounded-full text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-700 focus:outline-none" title="Import Data">
+                    <i class="fas fa-upload"></i>
+                </button>
+                <input type="file" id="import-file-input" accept="application/json" class="hidden">
+                <button id="theme-toggle" class="p-2 rounded-full text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-700 focus:outline-none" title="Toggle Theme">
+                    <i class="fas fa-palette"></i>
+                </button>
+                <div class="flex items-center space-x-2">
+                    <div class="h-8 w-8 rounded-full bg-blue-500 flex items-center justify-center text-white font-bold"><i class="fas fa-user"></i></div>
+                    <span id="username-display" class="font-semibold text-slate-700 dark:text-slate-200">User</span>
+                    <button id="logout-btn" class="p-2 rounded-full text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-700 focus:outline-none" title="Logout"><i class="fas fa-sign-out"></i></button>
+                </div>
+            </div>
+        </header>
+
+        <main class="flex-grow p-6 overflow-y-auto">
+            <section id="dashboard" class="content-section active">
+                <h1 class="text-3xl font-bold text-slate-800 dark:text-white mb-6">Dashboard</h1>
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <div class="lg:col-span-2 space-y-6">
+                        <div class="bg-white dark:bg-slate-800 p-6 rounded-lg shadow-md">
+                            <h2 class="text-xl font-semibold mb-2">Welcome back, <span id="dash-username">User</span>!</h2>
+                            <p class="text-slate-600 dark:text-slate-400">This is your dashboard. Check your Tasks and other sections to get started.</p>
+                        </div>
+
+                        <div class="bg-white dark:bg-slate-800 p-6 rounded-lg shadow-md">
+                            <h2 class="text-xl font-semibold mb-4 text-slate-800 dark:text-white">Weekly Progress</h2>
+                            <div class="h-64">
+                                <canvas id="taskChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="lg:col-span-1 bg-white dark:bg-slate-800 p-6 rounded-lg shadow-md">
+                         <h2 class="text-xl font-semibold mb-4 text-slate-800 dark:text-white">Today's Schedule</h2>
+                         <div class="h-[540px] overflow-y-auto">
+                             <div class="timetable-container">
+                                <div id="timetable-times" class="timetable-times"></div>
+                                <div id="timetable-grid" class="timetable-grid"></div>
+                            </div>
+                         </div>
+                    </div>
+                </div>
+            </section>
+
+            <section id="tasks" class="content-section">
+                 <div class="flex justify-between items-center mb-6">
+                    <h1 class="text-3xl font-bold text-slate-800 dark:text-white">Task Manager</h1>
+                    <button id="add-task-btn" class="bg-blue-600 text-white font-semibold px-5 py-2 rounded-lg hover:bg-blue-700 transition shadow-md flex items-center"><i class="fas fa-plus mr-2"></i> Add Task</button>
+                </div>
+                <div id="task-form-container" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-20">
+                    <form id="task-form" class="bg-white dark:bg-slate-800 rounded-lg shadow-xl p-8 w-full max-w-lg">
+                        <div class="flex justify-between items-center mb-6"><h3 class="text-2xl font-bold text-slate-800 dark:text-white">Add New Task</h3><button type="button" id="close-task-form" class="text-2xl font-bold p-2 text-slate-500 hover:text-slate-800 dark:hover:text-white">&times;</button></div>
+                        <input type="text" id="task-title" placeholder="Task title" required class="w-full p-3 mb-4 bg-slate-100 dark:bg-slate-700 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <textarea id="task-description" placeholder="Description (optional)" class="w-full p-3 mb-4 bg-slate-100 dark:bg-slate-700 rounded-md h-24 resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                            <div><label for="task-deadline" class="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1">Deadline</label><input type="datetime-local" id="task-deadline" class="w-full p-3 bg-slate-100 dark:bg-slate-700 rounded-md"></div>
+                            <div><label for="task-priority" class="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1">Priority</label><select id="task-priority" class="w-full p-3 bg-slate-100 dark:bg-slate-700 rounded-md"><option value="low">Low</option><option value="medium" selected>Medium</option><option value="high">High</option></select></div>
+                            <div><label for="task-start-time" class="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1">Start Time</label><input type="time" id="task-start-time" class="w-full p-3 bg-slate-100 dark:bg-slate-700 rounded-md"></div>
+                            <div><label for="task-duration" class="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1">Estimated Duration (minutes)</label><input type="number" id="task-duration" placeholder="e.g., 60" min="1" class="w-full p-3 bg-slate-100 dark:bg-slate-700 rounded-md"></div>
+                        </div>
+                        <div class="mb-6"><label class="flex items-center space-x-2 text-sm font-medium text-slate-600 dark:text-slate-300"><input type="checkbox" id="task-is-daily" class="h-4 w-4 rounded text-blue-500 focus:ring-blue-500"><span>This is a daily recurring task</span></label></div>
+                        <div class="flex justify-end space-x-3"><button type="button" id="cancel-task" class="px-6 py-2 bg-slate-200 dark:bg-slate-600 rounded-md font-semibold hover:bg-slate-300 dark:hover:bg-slate-500">Cancel</button><button type="submit" class="px-6 py-2 bg-blue-600 text-white rounded-md font-semibold hover:bg-blue-700">Add Task</button></div>
+                    </form>
+                </div>
+                
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                    <div>
+                        <h2 class="text-2xl font-bold text-slate-800 dark:text-white mb-4 border-b-2 border-slate-200 dark:border-slate-700 pb-2">Daily Tasks</h2>
+                        <div id="daily-tasks-list" class="space-y-4">
+                            </div>
+                    </div>
+
+                    <div>
+                        <h2 class="text-2xl font-bold text-slate-800 dark:text-white mb-4 border-b-2 border-slate-200 dark:border-slate-700 pb-2">One-Time Tasks</h2>
+                        <div id="extra-tasks-list" class="space-y-4">
+                            </div>
+                    </div>
+                </div>
+
+            </section>
+
+             <div id="task-duration-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-30">
+                <div class="bg-white dark:bg-slate-800 rounded-lg shadow-xl p-8 w-full max-w-sm">
+                    <h3 class="text-2xl font-bold text-slate-800 dark:text-white mb-4">Complete Task</h3>
+                    <p class="text-slate-600 dark:text-slate-400 mb-4">How many minutes did this task take to complete?</p>
+                    <input type="number" id="task-completion-duration" placeholder="Duration in minutes" min="1" required class="w-full p-3 mb-6 bg-slate-100 dark:bg-slate-700 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <div class="flex justify-end space-x-3">
+                        <button type="button" id="cancel-duration-modal" class="px-6 py-2 bg-slate-200 dark:bg-slate-600 rounded-md font-semibold hover:bg-slate-300 dark:hover:bg-slate-500">Cancel</button>
+                        <button type="button" id="save-duration-btn" class="px-6 py-2 bg-blue-600 text-white rounded-md font-semibold hover:bg-blue-700">Save</button>
+                    </div>
+                </div>
+            </div>
+
+            <section id="calendar" class="content-section">
+                <div class="bg-white dark:bg-slate-800 p-6 rounded-lg shadow-md">
+                    <div id="calendar-header" class="flex justify-between items-center mb-6">
+                        <button id="calendar-prev-btn" class="p-2 rounded-full text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-700">
+                            <i class="fas fa-chevron-left"></i>
+                        </button>
+                        <h2 id="calendar-month-year" class="text-2xl font-bold text-slate-800 dark:text-white"></h2>
+                        <button id="calendar-next-btn" class="p-2 rounded-full text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-700">
+                            <i class="fas fa-chevron-right"></i>
+                        </button>
+                    </div>
+
+                    <div id="calendar-weekdays" class="grid grid-cols-7 gap-4 mb-2">
+                        </div>
+
+                    <div id="calendar-grid" class="calendar-grid">
+                        </div>
+                </div>
+            </section>
+            
+            <section id="time-waste" class="content-section">
+                <div class="flex justify-between items-center mb-6">
+                    <h1 class="text-3xl font-bold text-slate-800 dark:text-white">Time Waste Tracker</h1>
+                    <button id="add-time-waste-btn" class="bg-red-600 text-white font-semibold px-5 py-2 rounded-lg hover:bg-red-700 transition shadow-md flex items-center"><i class="fas fa-plus mr-2"></i> Log Time Waste</button>
+                </div>
+
+                <div class="bg-white dark:bg-slate-800 p-6 rounded-lg shadow-md mb-6">
+                    <h2 class="text-xl font-semibold text-slate-800 dark:text-white">Today's Total</h2>
+                    <p id="total-time-wasted" class="text-3xl font-bold text-red-500 mt-2">0 minutes</p>
+                </div>
+
+                <div id="time-waste-form-container" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-20">
+                    <form id="time-waste-form" class="bg-white dark:bg-slate-800 rounded-lg shadow-xl p-8 w-full max-w-md">
+                        <div class="flex justify-between items-center mb-6"><h3 class="text-2xl font-bold text-slate-800 dark:text-white">Log Time Waste</h3><button type="button" id="close-time-waste-form" class="text-2xl font-bold p-2 text-slate-500 hover:text-slate-800 dark:hover:text-white">&times;</button></div>
+                        <input type="text" id="time-waste-activity" placeholder="e.g., Scrolling social media" required class="w-full p-3 mb-4 bg-slate-100 dark:bg-slate-700 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500">
+                        <input type="number" id="time-waste-duration" placeholder="Duration in minutes" required min="1" class="w-full p-3 mb-4 bg-slate-100 dark:bg-slate-700 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500">
+                        <div class="flex justify-end space-x-3"><button type="button" id="cancel-time-waste" class="px-6 py-2 bg-slate-200 dark:bg-slate-600 rounded-md font-semibold hover:bg-slate-300 dark:hover:bg-slate-500">Cancel</button><button type="submit" class="px-6 py-2 bg-red-600 text-white rounded-md font-semibold hover:bg-red-700">Log</button></div>
+                    </form>
+                </div>
+                <div id="time-waste-list" class="space-y-4"></div>
+            </section>
+
+            <section id="growth" class="content-section">
+                <h1 class="text-3xl font-bold text-slate-800 dark:text-white mb-6">growth</h1>
+                <div id="growth-header" class="text-center mb-6 bg-white dark:bg-slate-800 p-6 rounded-lg shadow-md">
+                    </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="bg-white dark:bg-slate-800 p-6 rounded-lg shadow-md">
+                        <div class="flex justify-between items-center mb-4">
+                            <h2 class="text-xl font-semibold text-slate-800 dark:text-white">Improvements (<span id="improvements-count">0</span>)</h2>
+                            <button id="add-improvement-btn" class="bg-green-600 text-white font-semibold px-4 py-2 rounded-lg hover:bg-green-700 transition shadow-md text-sm flex items-center"><i class="fas fa-plus mr-2"></i> Add</button>
+                        </div>
+                        <div id="improvements-list" class="space-y-3"></div>
+                    </div>
+                    <div class="bg-white dark:bg-slate-800 p-6 rounded-lg shadow-md">
+                        <div class="flex justify-between items-center mb-4">
+                            <h2 class="text-xl font-semibold text-slate-800 dark:text-white">Mistakes (<span id="mistakes-count">0</span>)</h2>
+                            <button id="add-mistake-btn" class="bg-yellow-600 text-white font-semibold px-4 py-2 rounded-lg hover:bg-yellow-700 transition shadow-md text-sm flex items-center"><i class="fas fa-plus mr-2"></i> Add</button>
+                        </div>
+                        <div id="mistakes-list" class="space-y-3"></div>
+                    </div>
+                </div>
+            </section>
+
+            <div id="growth-form-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-30">
+                <form id="growth-form" class="bg-white dark:bg-slate-800 rounded-lg shadow-xl p-8 w-full max-w-lg">
+                    <div class="flex justify-between items-center mb-6">
+                        <h3 id="growth-form-title" class="text-2xl font-bold text-slate-800 dark:text-white">Add Entry</h3>
+                        <button type="button" id="close-growth-form" class="text-2xl font-bold p-2 text-slate-500 hover:text-slate-800 dark:hover:text-white">&times;</button>
+                    </div>
+                    <textarea id="growth-text-input" placeholder="Enter your note..." required class="w-full p-3 mb-4 bg-slate-100 dark:bg-slate-700 rounded-md h-32 resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>
+                    <div class="flex justify-end space-x-3">
+                        <button type="button" id="cancel-growth-form" class="px-6 py-2 bg-slate-200 dark:bg-slate-600 rounded-md font-semibold hover:bg-slate-300 dark:hover:bg-slate-500">Cancel</button>
+                        <button type="submit" class="px-6 py-2 bg-blue-600 text-white rounded-md font-semibold hover:bg-blue-700">Save</button>
+                    </div>
+                </form>
+            </div>
+            
+             <section id="vision" class="content-section">
+                <div class="flex justify-between items-center mb-6">
+                    <h1 class="text-3xl font-bold text-slate-800 dark:text-white">Vision</h1>
+                    <button id="add-vision-btn" class="bg-indigo-600 text-white font-semibold px-5 py-2 rounded-lg hover:bg-indigo-700 transition shadow-md flex items-center"><i class="fas fa-plus mr-2"></i> Add Vision</button>
+                </div>
+                <div id="vision-form-container" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-20">
+                    <form id="vision-form" class="bg-white dark:bg-slate-800 rounded-lg shadow-xl p-8 w-full max-w-lg">
+                        <div class="flex justify-between items-center mb-6"><h3 id="vision-form-title" class="text-2xl font-bold text-slate-800 dark:text-white">Add New Vision</h3><button type="button" id="close-vision-form" class="text-2xl font-bold p-2 text-slate-500 hover:text-slate-800 dark:hover:text-white">&times;</button></div>
+                        <div class="mb-4">
+                             <label for="vision-text-input" class="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1">Vision</label>
+                            <textarea id="vision-text-input" placeholder="Describe your vision (e.g., Achieve 7.5 CGPA)" required class="w-full p-3 mb-4 bg-slate-100 dark:bg-slate-700 rounded-md h-24 resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500"></textarea>
+                        </div>
+                        <div class="mb-6">
+                             <label for="vision-deadline-input" class="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1">Deadline</label>
+                            <input type="date" id="vision-deadline-input" required class="w-full p-3 bg-slate-100 dark:bg-slate-700 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                        </div>
+                        <div class="flex justify-end space-x-3">
+                            <button type="button" id="cancel-vision-form" class="px-6 py-2 bg-slate-200 dark:bg-slate-600 rounded-md font-semibold hover:bg-slate-300 dark:hover:bg-slate-500">Cancel</button>
+                            <button type="submit" id="vision-submit-btn" class="px-6 py-2 bg-indigo-600 text-white rounded-md font-semibold hover:bg-indigo-700">Add Vision</button>
+                         </div>
+                    </form>
+                </div>
+                <div id="visions-list" class="space-y-4"></div>
+            </section>
+
+        </main>
+    </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    // --- UTILITY FUNCTIONS ---
+    const getTodayDateString = () => new Date().toISOString().split('T')[0];
+    const getYesterdayDateString = () => {
+        const yesterday = new Date();
+        yesterday.setDate(yesterday.getDate() - 1);
+        return yesterday.toISOString().split('T')[0];
+    };
+    // WARNING: Basic obfuscation for demonstration ONLY. NOT secure.
+    const simpleObscure = (str) => btoa(str.split("").reverse().join(""));
+    const simpleReveal = (str) => atob(str).split("").reverse().join("");
+
+
+    // --- DOM ELEMENT SELECTORS ---
+    const authSystem = document.getElementById('auth-system'), loginForm = document.getElementById('login-form'), emailInput = document.getElementById('login-email'), passwordInput = document.getElementById('login-password'),
+    signupForm = document.getElementById('signup-form'), signupEmailInput = document.getElementById('signup-email'), signupPasswordInput = document.getElementById('signup-password'), signupConfirmPasswordInput = document.getElementById('signup-confirm-password'),
+    showSignupBtn = document.getElementById('show-signup'), showLoginBtn = document.getElementById('show-login'), authError = document.getElementById('auth-error'),
+    app = document.getElementById('app'), usernameDisplay = document.getElementById('username-display'), dashUsernameDisplay = document.getElementById('dash-username'),
+    logoutBtn = document.getElementById('logout-btn'), themeToggle = document.getElementById('theme-toggle'), navItems = document.querySelectorAll('.nav-item'), contentSections = document.querySelectorAll('.content-section'),
+    taskScoreDisplay = document.getElementById('task-score-display'),
+    liveClockDisplay = document.getElementById('live-clock-display'),
+    exportDataBtn = document.getElementById('export-data-btn'), // Added
+    importDataBtn = document.getElementById('import-data-btn'), // Added
+    importFileInput = document.getElementById('import-file-input'); // Added
+    
+    // Task-related selectors
+    const tasksSection = document.getElementById('tasks'); 
+    const addTaskBtn = document.getElementById('add-task-btn'), taskFormContainer = document.getElementById('task-form-container'), taskForm = document.getElementById('task-form'),
+    closeTaskFormBtn = document.getElementById('close-task-form'), cancelTaskBtn = document.getElementById('cancel-task'),
+    taskTitleInput = document.getElementById('task-title'), taskDescInput = document.getElementById('task-description'), taskDeadlineInput = document.getElementById('task-deadline'),
+    taskPriorityInput = document.getElementById('task-priority'), taskIsDailyInput = document.getElementById('task-is-daily'),
+    taskStartTimeInput = document.getElementById('task-start-time'), taskDurationInput = document.getElementById('task-duration'),
+    taskDurationModal = document.getElementById('task-duration-modal'), taskCompletionDurationInput = document.getElementById('task-completion-duration'),
+    cancelDurationModalBtn = document.getElementById('cancel-duration-modal'), saveDurationBtn = document.getElementById('save-duration-btn');
+
+    // Timetable selectors
+    const timetableTimes = document.getElementById('timetable-times'), timetableGrid = document.getElementById('timetable-grid');
+
+    // Time Waste selectors
+    const addTimeWasteBtn = document.getElementById('add-time-waste-btn'), timeWasteFormContainer = document.getElementById('time-waste-form-container'), timeWasteForm = document.getElementById('time-waste-form'),
+    closeTimeWasteFormBtn = document.getElementById('close-time-waste-form'), cancelTimeWasteBtn = document.getElementById('cancel-time-waste'), timeWasteList = document.getElementById('time-waste-list'),
+    timeWasteActivityInput = document.getElementById('time-waste-activity'), timeWasteDurationInput = document.getElementById('time-waste-duration'),
+    totalTimeWastedDisplay = document.getElementById('total-time-wasted');
+
+    // growth selectors
+    const addImprovementBtn = document.getElementById('add-improvement-btn'), addMistakeBtn = document.getElementById('add-mistake-btn'),
+    improvementsList = document.getElementById('improvements-list'), mistakesList = document.getElementById('mistakes-list'),
+    improvementsCount = document.getElementById('improvements-count'), mistakesCount = document.getElementById('mistakes-count'),
+    growthFormModal = document.getElementById('growth-form-modal'), growthForm = document.getElementById('growth-form'),
+    growthFormTitle = document.getElementById('growth-form-title'), growthTextInput = document.getElementById('growth-text-input'),
+    closegrowthFormBtn = document.getElementById('close-growth-form'), cancelgrowthFormBtn = document.getElementById('cancel-growth-form'),
+    growthHeader = document.getElementById('growth-header');
+    
+    // Vision selectors (renamed from Vision Board)
+    const addVisionBtn = document.getElementById('add-vision-btn'), visionFormContainer = document.getElementById('vision-form-container'), visionForm = document.getElementById('vision-form'),
+    closeVisionFormBtn = document.getElementById('close-vision-form'), cancelVisionFormBtn = document.getElementById('cancel-vision-form'), visionsList = document.getElementById('visions-list'),
+    visionTextInput = document.getElementById('vision-text-input'), visionDeadlineInput = document.getElementById('vision-deadline-input'),
+    visionFormTitle = document.getElementById('vision-form-title'), visionSubmitBtn = document.getElementById('vision-submit-btn');
+    
+    // NEW: Calendar Selectors
+    const calendarPrevBtn = document.getElementById('calendar-prev-btn');
+    const calendarNextBtn = document.getElementById('calendar-next-btn');
+    const calendarMonthYear = document.getElementById('calendar-month-year');
+    const calendarWeekdays = document.getElementById('calendar-weekdays');
+    const calendarGrid = document.getElementById('calendar-grid');
+
+    // --- STATE MANAGEMENT ---
+    const today = new Date();
+    let state = { 
+        user: null, 
+        theme: 'light', 
+        activeSection: 'dashboard', 
+        tasks: [], 
+        improvements: [], 
+        mistakes: [], 
+        timeWaste: [], 
+        visions: [], 
+        taskScore: 0, 
+        lastVisit: null,
+        calendar: { // NEW: Calendar state
+            month: today.getMonth(),
+            year: today.getFullYear()
+        }
+    };
+    let clockInterval = null, taskTimersInterval = null, taskChartInstance = null;
+    let currentTaskToCompleteId = null;
+    let growthEditState = { type: null, id: null };
+    let editVisionId = null; 
+
+    // --- LOCAL STORAGE & AUTH ---
+    const saveState = async () => {
+      if (state.user) {
+        localStorage.setItem(`productivityMasterState_${state.user}`, JSON.stringify(state));
+        await saveToBackend(state.user, state);
+      } else {
+        console.warn("Attempted to save state without a user. State not saved.");
+      }
+    };
+
+    const loadState = async () => { // <-- Made this function async
+        const loggedInUserEmail = sessionStorage.getItem('loggedInUserEmail'); // Use sessionStorage for login status
+        if (loggedInUserEmail) {
+             const savedState = localStorage.getItem(`productivityMasterState_${loggedInUserEmail}`);
+             if (savedState) { 
+                 // 1. Found data in localStorage (on-device)
+                 console.log("Loading state from localStorage");
+                 state = JSON.parse(savedState); 
+                 state.user = loggedInUserEmail; // Ensure user is set correctly
+             } else {
+                // 2. No data in localStorage, try loading from Firebase (backup)
+                console.log("No state in localStorage, trying Firebase...");
+                const backendState = await window.loadFromBackend(loggedInUserEmail);
+                if (backendState) {
+                    // 3. Found data in Firebase
+                    console.log("Loading state from Firebase");
+                    state = backendState;
+                    state.user = loggedInUserEmail; // Ensure user is set
+                    // Save the loaded backup data back to localStorage for next time
+                    localStorage.setItem(`productivityMasterState_${loggedInUserEmail}`, JSON.stringify(state));
+                } else {
+                    // 4. No data in localStorage OR Firebase (truly new user or data lost)
+                    console.log("No state in Firebase, initializing new state.");
+                    const today = new Date();
+                    state = { 
+                        user: loggedInUserEmail, 
+                        theme: 'light', 
+                        activeSection: 'dashboard', 
+                        tasks: [], 
+                        improvements: [], 
+                        mistakes: [], 
+                        timeWaste: [], 
+                        visions: [], 
+                        taskScore: 0, 
+                        lastVisit: null,
+                        calendar: {
+                            month: today.getMonth(),
+                            year: today.getFullYear()
+                        }
+                    };
+                }
+             }
+
+             // --- Data Sanitization (run this regardless of load source) ---
+             if (!state.timeWaste) state.timeWaste = [];
+             if (!state.visions) state.visions = []; 
+             if (!state.improvements) state.improvements = [];
+             if (!state.mistakes) state.mistakes = [];
+             if (!state.goals) state.goals = []; // This seems unused, but good to keep
+             if (!state.calendar) { // NEW: Ensure calendar state exists
+                const today = new Date();
+                state.calendar = {
+                    month: today.getMonth(),
+                    year: today.getFullYear()
+                };
+             }
+             state.tasks.forEach(t => { 
+                if(t.completed) {
+                    if(!t.completedOn) t.completedOn = getTodayDateString();
+                    if(t.actualDuration === undefined || t.actualDuration === null) t.actualDuration = t.duration;
+                }
+             });
+             // -----------------------------------------------------------
+
+        } else {
+            // No user logged in session
+             state.user = null;
+        }
+    };
+
+     const displayAuthError = (message) => {
+        authError.textContent = message;
+        authError.classList.remove('hidden');
+    };
+
+    const clearAuthError = () => {
+        authError.textContent = '';
+        authError.classList.add('hidden');
+    };
+
+    const handleLogin = async (email, password) => { // <-- Made this function async
+        clearAuthError();
+        const storedUserData = localStorage.getItem(`user_${email}`);
+        if (!storedUserData) {
+            displayAuthError('Email not found.');
+            return;
+        }
+        const userData = JSON.parse(storedUserData);
+        // WARNING: Comparing obscured passwords - INSECURE
+        if (simpleObscure(password) === userData.password) {
+             sessionStorage.setItem('loggedInUserEmail', email); // Store login status in session
+             await loadState(); // <-- Added await to wait for data to load
+             initApp(); // Initialize the main application UI
+        } else {
+            displayAuthError('Incorrect password.');
+        }
+    };
+
+    const handleSignup = (email, password, confirmPassword) => {
+        clearAuthError();
+        if (password !== confirmPassword) {
+            displayAuthError('Passwords do not match.');
+            return;
+        }
+        if (localStorage.getItem(`user_${email}`)) {
+            displayAuthError('Email already registered.');
+            return;
+        }
+        // WARNING: Storing obscured password - INSECURE
+        const newUser = { password: simpleObscure(password) };
+        localStorage.setItem(`user_${email}`, JSON.stringify(newUser));
+        // Auto-login after signup
+        handleLogin(email, password); 
+    };
+
+
+    // --- RENDERING ---
+    const render = () => {
+        if (state.user) {
+            authSystem.classList.add('hidden'); app.classList.remove('hidden'); app.classList.add('flex');
+            usernameDisplay.textContent = state.user; dashUsernameDisplay.textContent = state.user; liveClockDisplay.classList.remove('hidden');
+        } else {
+            authSystem.classList.remove('hidden'); app.classList.add('hidden'); app.classList.remove('flex'); liveClockDisplay.classList.add('hidden');
+        }
+
+        document.documentElement.className = state.theme;
+
+        navItems.forEach(item => { item.classList.toggle('bg-slate-100', item.dataset.section === state.activeSection); item.classList.toggle('dark:bg-slate-700', item.dataset.section === state.activeSection); item.classList.toggle('active', item.dataset.section === state.activeSection); });
+        contentSections.forEach(section => { section.classList.toggle('active', section.id === state.activeSection); });
+        
+        taskScoreDisplay.textContent = state.taskScore;
+        
+        renderTasks(); 
+        renderTimeWaste(); 
+        rendergrowth(); 
+        renderVisions(); 
+        renderTimetable(); 
+        renderWeeklyChart();
+        renderCalendar(); 
+    };
+
+    const renderTasks = () => {
+        const dailyTasksList = document.getElementById('daily-tasks-list');
+        const extraTasksList = document.getElementById('extra-tasks-list');
+
+        dailyTasksList.innerHTML = '';
+        extraTasksList.innerHTML = '';
+
+        const dailyTasks = state.tasks.filter(t => t.isDaily);
+        const extraTasks = state.tasks.filter(t => !t.isDaily);
+        
+        const priorityStyles = { low: 'border-l-green-500', medium: 'border-l-yellow-500', high: 'border-l-red-500' };
+
+        // ===== MODIFIED: createTaskElement FUNCTION =====
+        // Helper function to create a single task element to avoid repeating code
+        const createTaskElement = (task) => {
+            const taskEl = document.createElement('div');
+            taskEl.className = `bg-white dark:bg-slate-800 p-5 rounded-lg shadow-md border-l-4 ${priorityStyles[task.priority]} flex flex-col justify-between`;
+            taskEl.dataset.id = task.id;
+            
+            let deadlineHTML = '';
+            let countdownTimerHTML = '';
+
+            if (task.isDaily) {
+                // For daily tasks, show a simple, static label.
+                deadlineHTML = `<span class="font-semibold text-slate-500 dark:text-slate-400 text-xs uppercase">Daily Routine</span>`;
+            } else {
+                // For one-time tasks, show the full deadline and countdown timer.
+                const deadlineInfo = task.deadline ? new Date(task.deadline).toLocaleString() : 'No deadline';
+                deadlineHTML = `<span class="font-semibold text-slate-600 dark:text-slate-300"><i class="fas fa-calendar mr-1"></i> ${deadlineInfo}</span>`;
+                countdownTimerHTML = task.deadline && !task.completed ? `<div class="task-countdown-timer mt-3 pt-3 border-t border-slate-200 dark:border-slate-700 text-sm font-semibold text-slate-600 dark:text-slate-300" data-task-id="${task.id}"></div>` : '';
+            }
+
+            taskEl.innerHTML = `
+                <div>
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <h3 class="font-bold text-lg text-slate-800 dark:text-white ${task.completed ? 'line-through' : ''}">${task.isDaily ? '<i class="fas fa-sync-alt text-blue-400 mr-2" title="Daily Task"></i>' : ''}${task.title}</h3>
+                            <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">${task.description}</p>
+                        </div>
+                        <input type="checkbox" class="task-checkbox h-5 w-5 rounded text-blue-500 cursor-pointer focus:ring-0 shrink-0 ml-2" ${task.completed ? 'checked' : ''}>
+                    </div>
+                </div>
+                <div>
+                    <div class="mt-4 flex justify-between items-center text-sm">
+                        ${deadlineHTML}
+                        <div class="space-x-2">
+                           <button class="edit-task-btn text-slate-400 hover:text-blue-500"><i class="fas fa-pencil-alt"></i></button>
+                           <button class="delete-task-btn text-slate-400 hover:text-red-500"><i class="fas fa-trash"></i></button>
+                        </div>
+                    </div>
+                    ${countdownTimerHTML}
+                </div>`;
+            return taskEl;
+        };
+        // ===== END MODIFIED: createTaskElement FUNCTION =====
+
+
+        // Render Daily Tasks
+        if (dailyTasks.length === 0) {
+            dailyTasksList.innerHTML = `<div class="text-center p-4 bg-white dark:bg-slate-800 rounded-lg"><p class="text-slate-500">No daily tasks defined.</p></div>`;
+        } else {
+            dailyTasks.forEach(task => dailyTasksList.appendChild(createTaskElement(task)));
+        }
+
+        // Render One-Time (Extra) Tasks
+        if (extraTasks.length === 0) {
+            extraTasksList.innerHTML = `<div class="text-center p-4 bg-white dark:bg-slate-800 rounded-lg"><p class="text-slate-500">No one-time tasks. Add one!</p></div>`;
+        } else {
+            extraTasks.forEach(task => extraTasksList.appendChild(createTaskElement(task)));
+        }
+    };
+
+
+    const renderTimetable = () => {
+        timetableTimes.innerHTML = '';
+        timetableGrid.innerHTML = '';
+        const startHour = 7;
+        const endHour = 24;
+
+        for (let i = startHour; i < endHour; i++) {
+            const timeLabel = document.createElement('div');
+            timeLabel.className = 'time-slot-label';
+            const displayHour = i >= 13 ? i - 12 : (i === 0 ? 12 : i);
+            const ampm = i < 12 || i === 24 ? 'AM' : 'PM';
+            timeLabel.textContent = `${displayHour}:00 ${ampm}`;
+            timetableTimes.appendChild(timeLabel);
+        }
+
+        const priorityColors = { low: 'bg-green-500', medium: 'bg-yellow-500', high: 'bg-red-500' };
+
+        state.tasks.filter(t => t.startTime && t.duration).forEach(task => {
+            const [hours, minutes] = task.startTime.split(':').map(Number);
+            const top = ((hours - startHour) * 60) + minutes;
+            const height = task.duration;
+
+            const taskEl = document.createElement('div');
+            taskEl.className = `timetable-task ${priorityColors[task.priority] || 'bg-blue-500'}`;
+            taskEl.style.top = `${top}px`;
+            taskEl.style.height = `${height}px`;
+            taskEl.innerHTML = `<p class="font-bold text-sm">${task.title}</p><p class="text-xs">${task.startTime}</p>`;
+            timetableGrid.appendChild(taskEl);
+        });
+    };
+    
+    const renderTimeWaste = () => {
+        timeWasteList.innerHTML = '';
+        const today = getTodayDateString();
+        const todaysWaste = state.timeWaste.filter(entry => entry.date === today);
+
+        const totalMinutes = todaysWaste.reduce((sum, entry) => sum + entry.duration, 0);
+        totalTimeWastedDisplay.textContent = `${totalMinutes} minutes`;
+        
+        if (todaysWaste.length === 0) { 
+            timeWasteList.innerHTML = `<p class="text-slate-500 text-center">No time waste logged today. Keep it up!</p>`; 
+            return; 
+        }
+        
+        todaysWaste.forEach(entry => {
+            const entryEl = document.createElement('div');
+            entryEl.className = 'bg-white dark:bg-slate-800 p-4 rounded-lg shadow-md flex justify-between items-center';
+            entryEl.dataset.id = entry.id;
+            entryEl.innerHTML = `
+                <div>
+                    <p class="font-semibold text-slate-800 dark:text-white">${entry.activity}</p>
+                    <p class="text-sm text-slate-500 dark:text-slate-400">${entry.duration} minutes</p>
+                </div>
+                <button class="delete-time-waste-btn text-slate-400 hover:text-red-500"><i class="fas fa-trash"></i></button>
+            `;
+            timeWasteList.appendChild(entryEl);
+        });
+    };
+
+    const rendergrowth = () => {
+        const numImprovements = state.improvements.length;
+        const numMistakes = state.mistakes.length;
+
+        if (numImprovements === 0 && numMistakes === 0) {
+             growthHeader.innerHTML = `
+                <h2 class="text-2xl font-bold text-slate-500 dark:text-slate-400">Waiting for next movement...</h2>
+             `;
+        } else if (numImprovements > numMistakes) {
+            growthHeader.innerHTML = `
+                <h2 class="text-2xl font-bold text-green-500">well done 😊</h2>
+                <p class="text-slate-500 dark:text-slate-400 mt-2">Every step you take, every mistake you learn from, makes you stronger and wiser. Keep believing in yourself</p>
+            `;
+        } else if (numMistakes > numImprovements) {
+            growthHeader.innerHTML = `
+                <h2 class="text-2xl font-bold text-yellow-500">not well😒… yet</h2>
+                <p class="text-slate-500 dark:text-slate-400 mt-2">As long as I'm alive, I have infinite chances</p>
+            `;
+        } else { // Equal number
+            growthHeader.innerHTML = `
+                <h2 class="text-2xl font-bold text-blue-500">Tied for now… stronger next time</h2>
+                <p class="text-slate-500 dark:text-slate-400 mt-2">Balance is key. Reflect on today and aim for progress tomorrow.</p>
+            `;
+        }
+
+
+        improvementsList.innerHTML = '';
+        mistakesList.innerHTML = '';
+        improvementsCount.textContent = numImprovements;
+        mistakesCount.textContent = numMistakes;
+
+        const createReviewItem = (item, type) => {
+            const itemEl = document.createElement('div');
+            itemEl.className = 'bg-slate-100 dark:bg-slate-700 p-3 rounded-lg flex justify-between items-center';
+            itemEl.dataset.id = item.id;
+            itemEl.innerHTML = `
+                <p class="text-slate-800 dark:text-slate-200 text-sm">${item.text}</p>
+                <div class="space-x-2">
+                    <button class="edit-growth-item-btn text-slate-400 hover:text-blue-500" data-type="${type}"><i class="fas fa-pencil-alt"></i></button>
+                    <button class="delete-growth-item-btn text-slate-400 hover:text-red-500" data-type="${type}"><i class="fas fa-trash"></i></button>
+                </div>
+            `;
+            return itemEl;
+        };
+
+        if (state.improvements.length === 0) {
+            improvementsList.innerHTML = `<p class="text-slate-500 text-center text-sm">No improvements logged yet.</p>`;
+        } else {
+            state.improvements.forEach(item => improvementsList.appendChild(createReviewItem(item, 'improvement')));
+        }
+
+        if (state.mistakes.length === 0) {
+            mistakesList.innerHTML = `<p class="text-slate-500 text-center text-sm">No mistakes logged yet.</p>`;
+        } else {
+            state.mistakes.forEach(item => mistakesList.appendChild(createReviewItem(item, 'mistake')));
+        }
+    };
+    
+    const renderVisions = () => { // Renamed function
+        visionsList.innerHTML = ''; // Renamed target element
+        if(state.visions.length === 0) { // Renamed state array
+            visionsList.innerHTML = `<p class="text-slate-500 text-center">No visions defined yet. Click 'Add Vision' to set your aspirations!</p>`;
+            return;
+        }
+        state.visions.forEach(vision => {
+            const visionEl = document.createElement('div');
+            visionEl.className = 'bg-white dark:bg-slate-800 p-4 rounded-lg shadow-md flex justify-between items-center';
+            visionEl.dataset.id = vision.id;
+            visionEl.innerHTML = `
+                <div>
+                    <p class="font-semibold text-slate-800 dark:text-white">${vision.text}</p>
+                    <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">Deadline: ${new Date(vision.deadline).toLocaleDateString()}</p>
+                </div>
+                <div class="space-x-2">
+                    <button class="edit-vision-btn text-slate-400 hover:text-blue-500"><i class="fas fa-pencil-alt"></i></button>
+                    <button class="delete-vision-btn text-slate-400 hover:text-red-500"><i class="fas fa-trash"></i></button>
+                </div>
+            `;
+            visionsList.appendChild(visionEl);
+        });
+    };
+
+    const renderWeeklyChart = () => {
+        const labels = [];
+        const productiveDataWithin = [];
+        const productiveDataOver = [];
+        const timeWasteData = [];
+        const estimatedData = [];
+
+        for (let i = 6; i >= 0; i--) {
+            const d = new Date();
+            d.setDate(d.getDate() - i);
+            const dateString = d.toISOString().split('T')[0];
+            labels.push(d.toLocaleDateString(undefined, { weekday: 'short' }));
+
+            const completedDailyTasks = state.tasks.filter(t => t.completedOn === dateString);
+            
+            const totalActualMinutes = completedDailyTasks.reduce((sum, t) => sum + (t.actualDuration || 0), 0);
+            const totalEstimatedMinutes = completedDailyTasks.reduce((sum, t) => sum + (t.duration || 0), 0);
+
+            const withinMinutes = Math.min(totalActualMinutes, totalEstimatedMinutes);
+            const overMinutes = totalActualMinutes > totalEstimatedMinutes ? totalActualMinutes - totalEstimatedMinutes : 0;
+
+            productiveDataWithin.push(withinMinutes / 60);
+            productiveDataOver.push(overMinutes / 60);
+            estimatedData.push(totalEstimatedMinutes / 60);
+
+            const dailyWaste = state.timeWaste.filter(w => w.date === dateString);
+            const dailyWasteMinutes = dailyWaste.reduce((sum, w) => sum + w.duration, 0);
+            timeWasteData.push(dailyWasteMinutes / 60);
+        }
+        
+        const chartData = {
+            labels: labels,
+            datasets: [
+                {
+                    type: 'line',
+                    label: 'Daily Goal (Hours)',
+                    data: estimatedData,
+                    borderColor: '#f59e0b',
+                    borderWidth: 2,
+                    fill: false,
+                    tension: 0.4,
+                    pointRadius: 4,
+                    pointBackgroundColor: '#f59e0b',
+                    order: 0
+                },
+                {
+                    type: 'bar',
+                    label: 'Productive Time',
+                    data: productiveDataWithin,
+                    backgroundColor: '#6ce5e8', // Updated color
+                    stack: 'productive',
+                    order: 1
+                },
+                {
+                    type: 'bar',
+                    label: 'Overtime',
+                    data: productiveDataOver,
+                    backgroundColor: '#ef4444', 
+                    stack: 'productive',
+                    order: 1
+                },
+                {
+                    type: 'bar',
+                    label: 'Time Waste',
+                    data: timeWasteData,
+                    backgroundColor: '#5896bb', // Updated color
+                    order: 1
+                }
+            ]
+        };
+
+        const config = {
+            data: chartData,
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: {
+                            color: state.theme === 'dark' ? '#e2e8f0' : '#334155'
+                        }
+                    },
+                    title: {
+                        display: false
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        stacked: true, 
+                        title: {
+                            display: true,
+                            text: 'Hours',
+                            color: state.theme === 'dark' ? '#e2e8f0' : '#334155'
+                        },
+                        ticks: {
+                            color: state.theme === 'dark' ? '#94a3b8' : '#64748b'
+                        },
+                        grid: {
+                            color: state.theme === 'dark' ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'
+                        }
+                    },
+                    x: {
+                         stacked: true,
+                         ticks: {
+                            color: state.theme === 'dark' ? '#94a3b8' : '#64748b'
+                        },
+                        grid: {
+                            color: 'transparent'
+                        }
+                    }
+                }
+            }
+        };
+
+        const ctx = document.getElementById('taskChart').getContext('2d');
+        if(taskChartInstance) {
+            taskChartInstance.destroy();
+        }
+        taskChartInstance = new Chart(ctx, config);
+    };
+
+    // NEW: Render Calendar Function
+    const renderCalendar = () => {
+        const { month, year } = state.calendar;
+        const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+        const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+        calendarMonthYear.textContent = `${monthNames[month]} ${year}`;
+        
+        // Render Weekdays
+        calendarWeekdays.innerHTML = '';
+        dayNames.forEach(day => {
+            calendarWeekdays.innerHTML += `<div class="text-center font-semibold text-slate-600 dark:text-slate-400 text-sm">${day}</div>`;
+        });
+
+        // Calendar Grid Logic
+        calendarGrid.innerHTML = '';
+        const firstDay = new Date(year, month, 1).getDay(); // 0 = Sunday, 1 = Monday...
+        const lastDate = new Date(year, month + 1, 0).getDate(); // Last day of current month
+        
+        const today = new Date();
+        const todayDateString = today.toISOString().split('T')[0];
+
+        const priorityColors = { low: 'bg-green-600', medium: 'bg-yellow-500', high: 'bg-red-600' };
+
+        // 1. Add empty cells for days before the 1st
+        for (let i = 0; i < firstDay; i++) {
+            calendarGrid.innerHTML += `<div class="calendar-day empty"></div>`;
+        }
+
+        // 2. Add cells for each day of the month
+        for (let day = 1; day <= lastDate; day++) {
+            const date = new Date(year, month, day);
+            const dateString = date.toISOString().split('T')[0]; // Format as YYYY-MM-DD
+            
+            let dayClasses = "calendar-day";
+            if (dateString === todayDateString) {
+                dayClasses += " today";
+            }
+            
+            // Find tasks for this day
+            const tasksForDay = state.tasks.filter(task => task.deadline && task.deadline.startsWith(dateString));
+            let tasksHTML = '<div class="space-y-1 overflow-y-auto max-h-[80px]">';
+            tasksForDay.forEach(task => {
+                tasksHTML += `<div class="calendar-task-dot ${priorityColors[task.priority]}" title="${task.title}">${task.title}</div>`;
+            });
+            tasksHTML += '</div>';
+
+            calendarGrid.innerHTML += `
+                <div class="${dayClasses}">
+                    <div class="calendar-day-number">${day}</div>
+                    ${tasksHTML}
+                </div>
+            `;
+        }
+        
+        // 3. Optional: Fill remaining grid (to make it 6 rows)
+        const totalCells = firstDay + lastDate;
+        const remainingCells = (totalCells % 7 === 0) ? 0 : 7 - (totalCells % 7);
+         for (let i = 0; i < remainingCells; i++) {
+            calendarGrid.innerHTML += `<div class="calendar-day empty"></div>`;
+        }
+    };
+    
+    // --- TIMERS & CLOCK ---
+    const startClock = () => { if (clockInterval) clearInterval(clockInterval); clockInterval = setInterval(() => { liveClockDisplay.textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); }, 1000); };
+    const updateAllTaskTimers = () => {
+        document.querySelectorAll('.task-countdown-timer').forEach(timerEl => {
+            const task = state.tasks.find(t => t.id === timerEl.dataset.taskId);
+            if (task && task.deadline && !task.completed) {
+                const distance = new Date(task.deadline).getTime() - new Date().getTime();
+                if (distance < 0) { timerEl.innerHTML = `<i class="fas fa-exclamation-circle text-red-500 mr-2"></i><span class="text-red-500 font-bold">Overdue</span>`;
+                } else { const d = Math.floor(distance / 86400000), h = Math.floor((distance % 86400000) / 3600000), m = Math.floor((distance % 3600000) / 60000), s = Math.floor((distance % 60000) / 1000); timerEl.innerHTML = `<i class="fas fa-hourglass-half mr-2"></i> ${d}d ${h}h ${m}m ${s}s`; }
+            } else { timerEl.innerHTML = ''; }
+        });
+    };
+
+    // --- DAILY RESET LOGIC ---
+    const dailyReset = () => {
+        const today = getTodayDateString();
+        if (state.lastVisit && state.lastVisit !== today) {
+            state.tasks.forEach(task => { if (task.isDaily) task.completed = false; });
+        }
+        state.lastVisit = today; saveState();
+    };
+
+    // --- INITIALIZATION and APP LOGIC---
+    const initApp = () => {
+        if (!state.user) return; // Should not happen if called correctly after login
+        dailyReset(); 
+        startClock();
+        if (taskTimersInterval) clearInterval(taskTimersInterval);
+        taskTimersInterval = setInterval(updateAllTaskTimers, 1000);
+        render(); // Initial render of the app UI
+    };
+    
+    // --- EVENT HANDLERS (Setup function first) ---
+    const setupForm = (addButton, formContainer, closeButton, cancelButton) => { 
+        if (addButton) addButton.addEventListener('click', () => formContainer.classList.remove('hidden')); 
+        if (closeButton) closeButton.addEventListener('click', () => formContainer.classList.add('hidden')); 
+        if (cancelButton) cancelButton.addEventListener('click', () => formContainer.classList.add('hidden')); 
+    };
+
+    // Authentication Handlers
+    loginForm.addEventListener('submit', (e) => { 
+        e.preventDefault(); 
+        handleLogin(emailInput.value.trim(), passwordInput.value);
+    });
+    signupForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        handleSignup(signupEmailInput.value.trim(), signupPasswordInput.value, signupConfirmPasswordInput.value);
+    });
+    showSignupBtn.addEventListener('click', () => {
+        loginForm.classList.add('hidden');
+        signupForm.classList.remove('hidden');
+        clearAuthError();
+    });
+     showLoginBtn.addEventListener('click', () => {
+        signupForm.classList.add('hidden');
+        loginForm.classList.remove('hidden');
+        clearAuthError();
+    });
+    logoutBtn.addEventListener('click', () => { 
+        clearInterval(clockInterval); 
+        clearInterval(taskTimersInterval); 
+        sessionStorage.removeItem('loggedInUserEmail'); // Clear session login status
+        state.user = null; 
+        window.location.reload(); 
+    });
+
+
+    // Other Event Handlers
+    themeToggle.addEventListener('click', () => { state.theme = state.theme === 'light' ? 'dark' : 'light'; saveState(); render(); });
+    navItems.forEach(item => { item.addEventListener('click', (e) => { e.preventDefault(); state.activeSection = item.dataset.section; saveState(); render(); }); });
+    
+    // Import/Export Handlers
+    exportDataBtn.addEventListener('click', () => {
+        try {
+            const dataStr = JSON.stringify(state, null, 2);
+            const blob = new Blob([dataStr], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `productivity-master-backup-${getTodayDateString()}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            console.log("Data exported successfully.");
+        } catch (err) {
+            console.error("Failed to export data:", err);
+        }
+    });
+
+    importDataBtn.addEventListener('click', () => {
+        importFileInput.click();
+    });
+
+    importFileInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) {
+            return;
+        }
+
+        if (file.type !== 'application/json') {
+            console.error("Invalid file type. Please select a .json file.");
+            e.target.value = null;
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            try {
+                const importedState = JSON.parse(event.target.result);
+                state = { 
+                    ...importedState, 
+                    user: state.user,
+                    theme: state.theme,
+                    activeSection: 'dashboard'
+                };
+                console.log("Data imported successfully. Merging with current session.");
+                saveState(); 
+                initApp();
+            } catch (err) {
+                console.error("Failed to parse imported file:", err);
+            } finally {
+                e.target.value = null;
+            }
+        };
+        reader.onerror = (err) => {
+            console.error("Failed to read file:", err);
+            e.target.value = null;
+        };
+        reader.readAsText(file);
+    });
+    // End Import/Export Handlers
+
+    // Form Setups
+    setupForm(addTaskBtn, taskFormContainer, closeTaskFormBtn, cancelTaskBtn);
+    setupForm(addTimeWasteBtn, timeWasteFormContainer, closeTimeWasteFormBtn, cancelTimeWasteBtn);
+    setupForm(addVisionBtn, visionFormContainer, closeVisionFormBtn, cancelVisionFormBtn);
+
+    // Form Submissions
+    taskForm.addEventListener('submit', (e) => { e.preventDefault(); const newTask = { id: Date.now().toString(), title: taskTitleInput.value, description: taskDescInput.value, deadline: taskDeadlineInput.value, priority: taskPriorityInput.value, isDaily: taskIsDailyInput.checked, completed: false, startTime: taskStartTimeInput.value, duration: parseInt(taskDurationInput.value, 10) || null, actualDuration: null, completedOn: null }; state.tasks.push(newTask); updateTaskScore(); taskForm.reset(); taskFormContainer.classList.add('hidden'); });
+    timeWasteForm.addEventListener('submit', (e) => { e.preventDefault(); const newTimeWaste = { id: Date.now().toString(), activity: timeWasteActivityInput.value, duration: parseInt(timeWasteDurationInput.value, 10), date: getTodayDateString() }; state.timeWaste.push(newTimeWaste); saveState(); render(); timeWasteForm.reset(); timeWasteFormContainer.classList.add('hidden'); });
+    visionForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const visionText = visionTextInput.value.trim();
+        const deadline = visionDeadlineInput.value;
+        if (!visionText || !deadline) return;
+
+        if (editVisionId) {
+            const vision = state.visions.find(v => v.id === editVisionId);
+            if (vision) {
+                vision.text = visionText;
+                vision.deadline = deadline;
+            }
+        } else {
+             const newVision = { id: Date.now().toString(), text: visionText, deadline: deadline };
+             state.visions.push(newVision);
+        }
+        saveState();
+        render();
+        visionForm.reset();
+        visionFormContainer.classList.add('hidden');
+        editVisionId = null;
+        visionFormTitle.textContent = 'Add New Vision';
+        visionSubmitBtn.textContent = 'Add Vision';
+    });
+
+    // Task Completion Modal Handlers
+    cancelDurationModalBtn.addEventListener('click', () => {
+        taskDurationModal.classList.add('hidden');
+        currentTaskToCompleteId = null;
+    });
+
+    saveDurationBtn.addEventListener('click', () => {
+        const task = state.tasks.find(t => t.id === currentTaskToCompleteId);
+        if (task) {
+            const duration = parseInt(taskCompletionDurationInput.value, 10);
+            if (duration > 0) {
+                task.completed = true;
+                task.completedOn = getTodayDateString();
+                task.actualDuration = duration;
+                updateTaskScore();
+            }
+        }
+        taskDurationModal.classList.add('hidden');
+        currentTaskToCompleteId = null;
+    });
+
+    // growth Form Handlers
+    const opengrowthForm = (type, id = null, text = '') => {
+        growthEditState = { type, id };
+        growthFormTitle.textContent = `${id ? 'Edit' : 'Add'} ${type.charAt(0).toUpperCase() + type.slice(1)}`;
+        growthTextInput.value = text;
+        growthFormModal.classList.remove('hidden');
+    };
+
+    addImprovementBtn.addEventListener('click', () => opengrowthForm('improvement'));
+    addMistakeBtn.addEventListener('click', () => opengrowthForm('mistake'));
+    closegrowthFormBtn.addEventListener('click', () => growthFormModal.classList.add('hidden'));
+    cancelgrowthFormBtn.addEventListener('click', () => growthFormModal.classList.add('hidden'));
+    
+    growthForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const text = growthTextInput.value.trim();
+        if (!text) return;
+        
+        const { type, id } = growthEditState;
+        if (id) {
+            const item = state[type === 'improvement' ? 'improvements' : 'mistakes'].find(i => i.id === id);
+            if (item) item.text = text;
+        } else {
+            state[type === 'improvement' ? 'improvements' : 'mistakes'].push({ id: Date.now().toString(), text });
+        }
+        
+        saveState();
+        render();
+        growthFormModal.classList.add('hidden');
+        growthForm.reset();
+    });
+
+    // NEW: Calendar Navigation
+    calendarPrevBtn.addEventListener('click', () => {
+        state.calendar.month--;
+        if (state.calendar.month < 0) {
+            state.calendar.month = 11;
+            state.calendar.year--;
+        }
+        saveState(); 
+        render();
+    });
+
+    calendarNextBtn.addEventListener('click', () => {
+        state.calendar.month++;
+        if (state.calendar.month > 11) {
+            state.calendar.month = 0;
+            state.calendar.year++;
+        }
+        saveState();
+        render();
+    });
+
+
+    // --- SCORE & LIST INTERACTION ---
+    function updateTaskScore() { const total = state.tasks.length, completed = state.tasks.filter(t => t.completed).length; state.taskScore = (total > 0) ? Math.round((completed / total) * 100) : 0; saveState(); render(); }
+    
+    tasksSection.addEventListener('click', (e) => { 
+        const cardEl = e.target.closest('[data-id]'); 
+        if(!cardEl) return; 
+        const task = state.tasks.find(t=>t.id===cardEl.dataset.id); 
+        if (!task) return; 
+        const target = e.target;
+
+        if(target.closest('.task-checkbox')){ 
+             const checkbox = target.closest('.task-checkbox');
+            if (checkbox.checked) {
+                e.preventDefault(); 
+                currentTaskToCompleteId = task.id;
+                taskCompletionDurationInput.value = task.duration || '';
+                taskDurationModal.classList.remove('hidden');
+            } else {
+                task.completed = false;
+                t.completedOn = null;
+                t.actualDuration = null;
+                updateTaskScore();
+            }
+        } else if(target.closest('.delete-task-btn')){
+            state.tasks = state.tasks.filter(t => t.id !== task.id);
+            updateTaskScore();
+        } else if (target.closest('.edit-task-btn')) { 
+            const taskToEdit = state.tasks.find(t => t.id === task.id);
+            if (!taskToEdit) return;
+
+            taskTitleInput.value = taskToEdit.title;
+            taskDescInput.value = taskToEdit.description;
+            taskDeadlineInput.value = taskToEdit.deadline;
+            taskPriorityInput.value = taskToEdit.priority;
+            taskIsDailyInput.checked = taskToEdit.isDaily;
+            taskStartTimeInput.value = taskToEdit.startTime;
+            taskDurationInput.value = taskToEdit.duration;
+            state.tasks = state.tasks.filter(t => t.id !== task.id);
+            taskFormContainer.classList.remove('hidden');
+        }
+    });
+    timeWasteList.addEventListener('click', (e) => { const c = e.target.closest('[data-id]'); if(c && e.target.closest('.delete-time-waste-btn')){ state.timeWaste = state.timeWaste.filter(entry => entry.id !== c.dataset.id); saveState(); render(); }});
+    
+    // Vision List Interaction
+     visionsList.addEventListener('click', (e) => {
+        const itemEl = e.target.closest('[data-id]');
+        if (!itemEl) return;
+        const id = itemEl.dataset.id;
+        const vision = state.visions.find(v => v.id === id);
+        if(!vision) return;
+
+        if (e.target.closest('.delete-vision-btn')) {
+            state.visions = state.visions.filter(v => v.id !== id);
+        } else if (e.target.closest('.edit-vision-btn')) {
+            editVisionId = id;
+            visionFormTitle.textContent = 'Edit Vision';
+            visionSubmitBtn.textContent = 'Update Vision';
+            visionTextInput.value = vision.text;
+            visionDeadlineInput.value = vision.deadline;
+            visionFormContainer.classList.remove('hidden');
+        }
+         saveState();
+         render();
+    });
+
+
+    const handlegrowthItemClick = (e) => {
+        const target = e.target.closest('button');
+        if (!target) return;
+
+        const itemEl = target.closest('[data-id]');
+        if(!itemEl) return;
+        const id = itemEl.dataset.id;
+        const type = target.dataset.type;
+        const list = type === 'improvement' ? state.improvements : state.mistakes;
+        const item = list.find(i => i.id === id);
+        if(!item) return;
+
+        if (target.classList.contains('delete-growth-item-btn')) {
+            if (type === 'improvement') {
+                state.improvements = state.improvements.filter(i => i.id !== id);
+            } else {
+                state.mistakes = state.mistakes.filter(i => i.id !== id);
+            }
+        } else if (target.classList.contains('edit-growth-item-btn')) {
+            opengrowthForm(type, id, item.text);
+        }
+        saveState();
+        render();
+    };
+
+    improvementsList.addEventListener('click', handlegrowthItemClick);
+    mistakesList.addEventListener('click', handlegrowthItemClick);
+
+    // Initial check on load
+    (async () => {
+        await loadState();
+        if (state.user) {
+            initApp();
+        } else {
+            authSystem.classList.remove('hidden');
+        }
+    })();
+
+});
+</script>
+</body>
+</html>
